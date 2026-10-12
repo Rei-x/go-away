@@ -18,6 +18,15 @@ function run(cmd: string, args: string[], timeout = 4000): Promise<string> {
   });
 }
 
+/** Like run(), but null when the command can't be started (e.g. not installed). */
+function tryRun(cmd: string, args: string[], timeout = 4000): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout, windowsHide: true }, (err, stdout) =>
+      resolve(err && (err as NodeJS.ErrnoException).code === "ENOENT" ? null : err ? "" : stdout),
+    );
+  });
+}
+
 /**
  * Slack exposes your huddle state on your own profile (`huddle_state: "in_a_huddle"`).
  * Needs a user token with the users.profile:read scope.
@@ -96,7 +105,8 @@ export async function deviceUse(
   platform = process.platform,
 ): Promise<DeviceUse | null> {
   if (platform === "linux") {
-    const out = await run("pactl", ["list", "short", "source-outputs"]);
+    const out = await tryRun("pactl", ["list", "short", "source-outputs"]);
+    if (out === null) return { mic: false, camera: false, micApps: [], method: "unavailable (pactl not installed)" };
     return { mic: out.trim().length > 0, camera: false, micApps: [], method: "pactl" };
   }
   if (platform === "win32") {

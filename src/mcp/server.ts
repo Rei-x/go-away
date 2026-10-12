@@ -189,7 +189,11 @@ server.registerTool(
       averageDeferralMinutes: records.length
         ? Math.round(records.reduce((a, r) => a + r.deferredMs, 0) / records.length / 6000) / 10
         : 0,
-      records: records.map((r) => ({ ...r, startedAt: new Date(r.startedAt).toISOString() })),
+      records: records.map((r) => ({
+        ...r,
+        startedAt: new Date(r.startedAt).toISOString(),
+        endedAt: new Date(r.endedAt).toISOString(),
+      })),
     };
   }),
 );

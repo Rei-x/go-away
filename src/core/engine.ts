@@ -213,7 +213,7 @@ export class Engine extends EventEmitter {
       },
       {
         check: "call detection",
-        ok: Boolean(device && device.method !== "zoom process only"),
+        ok: Boolean(device && device.method !== "zoom process only" && !device.method.startsWith("unavailable")),
         detail: device
           ? `${device.method}${device.micApps.length ? `; mic held by ${device.micApps.join(", ")}` : ""}`
           : (macHelperError ?? "not checked yet"),
