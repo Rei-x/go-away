@@ -23,12 +23,15 @@ Sources and the full reasoning: [docs/SCIENCE.md](docs/SCIENCE.md).
 
 - **A meeting in your calendar**: an event with other attendees or a video-call link, not marked "free", not declined by you. Solo blocks (e.g. "Lunch") don't count unless you set `calendar.soloEventsAreMeetings`.
 - **A Slack huddle**: read from your Slack profile's huddle state (needs a user token with `users.profile:read`).
-- **Your microphone is in use** (Linux: PulseAudio/PipeWire, Windows: the privacy consent store). On macOS there's no CLI for this, so Go Away checks for a Zoom meeting process and relies on Slack and the calendar; you can add your own check with `presence.inCallCommand`.
+- **Your microphone or camera is in use.** This catches Google Meet in the browser, Slack huddles, Zoom and Teams without any tokens.
+  - macOS: a small CoreAudio/CoreMediaIO helper (`native/macos/presence.swift`) is compiled on first run with the Xcode Command Line Tools. On macOS 14+ it also reports *which* app holds the mic, and always-listening system apps ("Hey Siri") are ignored (`presence.ignoreMicApps`). Without the Command Line Tools it falls back to detecting Zoom only.
+  - Linux: PulseAudio/PipeWire recording streams. Windows: the privacy consent store.
+  - Anything else: your own check via `presence.inCallCommand`.
 - **A meeting starts before the break would end.**
 
 Other rules:
 
-- **Focus sessions.** Calendar events with "Focus", "Deep work" or 🎯 in the title (configurable), or sessions you start from the tray or MCP. Eye breaks still happen; the long break waits for the session to end, for at most 90 minutes past due.
+- **Focus sessions.** Calendar events with "Focus", "Deep work", "No meeting" or 🎯 in the title (configurable), or sessions you start from the tray or MCP. Eye breaks still happen; the long break waits for the session to end, for at most 90 minutes past due.
 - **Pull forward.** If a long break is almost due and a meeting is about to start, the break starts early so it ends right before the meeting.
 - **Away counts.** 5+ minutes idle, asleep or locked (and not on a call) counts as a long break.
 - **No escape hatches.** Quitting is disabled during a break; if the app is killed, the break comes back on restart until its original end time. Settings that make breaks rarer, shorter or disabled only apply after the next completed break.
@@ -44,7 +47,7 @@ Requires Node 22+. Settings live in `~/.go-away/config.json` (override with `GO_
 
 ## Connect your calendar
 
-Google Calendar → Settings → your calendar → *Integrate calendar* → copy **Secret address in iCal format**, then tell your assistant "add this calendar to Go Away: <url>" (or put it in `calendar.icsUrls`). Add your calendar email to `calendar.ownerEmails` so meetings you declined are ignored.
+Google Calendar → Settings → your calendar → *Integrate calendar* → copy **Secret address in iCal format**, then tell your assistant "add this calendar to Go Away: <url>" (or put it in `calendar.icsUrls`). Your email is read from the feed, so meetings you declined are ignored without extra setup.
 
 To plan focus time, create calendar events with a focus keyword in the title, for example by asking your assistant to "block 9–11 tomorrow as 🎯 Focus" through its calendar connector. Go Away picks them up on the next refresh (every 5 minutes).
 
@@ -60,16 +63,19 @@ The tray menu has **Copy MCP server config**. It produces:
 }
 ```
 
-For Claude Code: `claude mcp add go-away -- node /path/to/go-away/dist/mcp/server.js`.
+For Claude Code, run `npm run mcp:claude` in the repo (it builds and registers the server for your user).
+
+Then ask your assistant to "set up Go Away". It starts with `check_setup`, which says what's connected and what's missing.
 
 | Tool | What it does |
 | --- | --- |
 | `get_status` | Working / on break / waiting for a meeting / holding for focus; next breaks; live call signals |
-| `get_config`, `update_config` | Read or patch any setting |
+| `check_setup` | What's connected: calendar, call detection (and which app holds the mic), Slack |
+| `get_config`, `update_config` | Read or patch any setting (tokens and secret calendar addresses are never shown) |
 | `add_calendar`, `remove_calendar` | Manage iCal feeds |
 | `get_schedule` | Meetings and focus sessions Go Away sees |
 | `start_focus_session`, `end_focus_session` | Start now or schedule one (`startAt`) |
-| `set_slack_token` | Enable huddle detection |
+| `set_slack_token` | Optional second huddle signal; can also set your Slack status to "On a break" during long breaks |
 | `get_break_history` | Breaks taken and how long they waited |
 | `explain_break_science` | The research behind the defaults |
 | `skip_break` | Always refuses, and says why |
@@ -87,6 +93,6 @@ Layout: `src/core` holds the scheduler, calendar, presence detection, engine and
 ## Not done yet
 
 - Packaged installers (electron-builder) and auto-start on login for unpackaged builds.
-- Native "mic in use" detection on macOS.
+- Syncing macOS Focus / Do Not Disturb with focus sessions.
 - Writing focus sessions back to Google Calendar (today: create them with your assistant's calendar connector).
 - Google Calendar OAuth (today: the secret iCal address, which is read-only and needs no Google Cloud project).

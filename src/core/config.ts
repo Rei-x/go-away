@@ -30,10 +30,13 @@ export const ConfigSchema = z.object({
       icsUrls: z.array(z.string().url()).default([]),
       refreshMinutes: z.number().min(1).max(60).default(5),
       /** Events whose title contains one of these words are focus sessions, not meetings. */
-      focusKeywords: z.array(z.string()).default(["focus", "deep work", "🎯"]),
+      focusKeywords: z.array(z.string()).default(["focus", "deep work", "no meeting", "🎯"]),
       /** Events with no other attendees count as meetings only if this is true (e.g. "Lunch" blocks). */
       soloEventsAreMeetings: z.boolean().default(false),
-      /** Your calendar email(s). Lets the app skip meetings you declined. */
+      /**
+       * Your calendar email(s). Lets the app skip meetings you declined. When empty, Google feeds
+       * are detected automatically (their calendar name is the owner's email).
+       */
       ownerEmails: z.array(z.string()).default([]),
     })
     .prefault({}),
@@ -44,6 +47,14 @@ export const ConfigSchema = z.object({
       slackUserToken: z.string().optional(),
       /** Treat the microphone being in use as "on a call" (catches Zoom, Meet, Huddles, …). */
       micInUseIsCall: z.boolean().default(true),
+      /** Treat the camera being in use as "on a call". */
+      cameraInUseIsCall: z.boolean().default(true),
+      /** macOS bundle ids that hold the microphone without being a call (e.g. "Hey Siri"). */
+      ignoreMicApps: z
+        .array(z.string())
+        .default(["com.apple.corespeechd", "com.apple.assistantd", "com.apple.SiriNCService"]),
+      /** While a break runs, set your Slack status to "On a break" (token needs users.profile:write). */
+      slackStatusDuringBreaks: z.boolean().default(false),
       /** Optional shell command; exit code 0 means "I'm on a call". For setups the built-in checks miss. */
       inCallCommand: z.string().optional(),
       pollSeconds: z.number().min(5).max(120).default(15),

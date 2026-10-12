@@ -8,7 +8,8 @@
     "start": "npm run build && electron .",
     "mcp": "node dist/mcp/server.js",
     "typecheck": "tsc -p . --noEmit",
-    "test": "tsc -p . && vitest run"
+    "test": "tsc -p . && vitest run",
+    "mcp:claude": "npm run build && claude mcp add go-away --scope user -- node \"$PWD/dist/mcp/server.js\""
   },
   "repository": {
     "type": "git",

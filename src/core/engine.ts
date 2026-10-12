@@ -13,7 +13,7 @@ import {
   saveConfig,
 } from "./config";
 import { fetchCalendars, type ScheduleEvent } from "./calendar";
-import { detectPresence, type PresenceSignal } from "./presence";
+import { detectPresence, macHelperError, setSlackBreakStatus, type PresenceSignal } from "./presence";
 import {
   type ActiveBreak,
   type BreakRecord,
@@ -29,6 +29,7 @@ export interface EngineOptions {
   /** Swappable for tests. */
   fetchCalendar?: (cfg: Config["calendar"]) => Promise<ScheduleEvent[]>;
   detectPresence?: (cfg: Config["presence"]) => Promise<PresenceSignal>;
+  setSlackStatus?: (token: string, endsAt: number) => Promise<boolean>;
 }
 
 export interface ConfigChangeResult {
@@ -44,6 +45,15 @@ interface PersistedState extends SchedulerState {
 
 const statePath = () => path.join(homeDir(), "state.json");
 const WARNING_MS = 30_000;
+
+export function redactUrl(url: string, index: number): string {
+  try {
+    const u = new URL(url);
+    return `#${index}: ${u.host}/…${u.pathname.slice(-12)}`;
+  } catch {
+    return `#${index}: (invalid url)`;
+  }
+}
 
 function reviveEvents(events: ScheduleEvent[]): ScheduleEvent[] {
   return events.map((e) => ({ ...e, start: new Date(e.start), end: new Date(e.end) }));
@@ -151,6 +161,7 @@ export class Engine extends EventEmitter {
     if (action.type === "start") {
       this.saveState();
       this.emit("break-start", action.brk);
+      this.announceBreak(action.brk);
     } else if (action.type === "end") {
       this.applyPendingConfig();
       this.saveState();
@@ -158,6 +169,64 @@ export class Engine extends EventEmitter {
     }
     this.maybeWarn(now);
     this.emit("status", this.status());
+  }
+
+  private announceBreak(brk: ActiveBreak): void {
+    const { slackUserToken, slackStatusDuringBreaks } = this.config.presence;
+    if (!slackUserToken || !slackStatusDuringBreaks || brk.kind !== "long") return;
+    (this.opts.setSlackStatus ?? setSlackBreakStatus)(slackUserToken, brk.endsAt).catch((err: Error) => {
+      this.presence = { ...this.presence, slackError: err.message };
+    });
+  }
+
+  /** Config with secrets hidden: tokens and secret calendar addresses shouldn't land in chat logs. */
+  redactedConfig(cfg: Config | null = this.config): unknown {
+    if (!cfg) return null;
+    return {
+      ...cfg,
+      calendar: { ...cfg.calendar, icsUrls: cfg.calendar.icsUrls.map(redactUrl) },
+      presence: { ...cfg.presence, slackUserToken: cfg.presence.slackUserToken ? "(set)" : undefined },
+    };
+  }
+
+  addCalendar(url: string): ConfigChangeResult {
+    const icsUrls = [...new Set([...(this.pendingConfig ?? this.config).calendar.icsUrls, url])];
+    return this.updateConfig({ calendar: { icsUrls } });
+  }
+
+  removeCalendar(index: number): ConfigChangeResult {
+    const icsUrls = (this.pendingConfig ?? this.config).calendar.icsUrls.filter((_, i) => i !== index);
+    return this.updateConfig({ calendar: { icsUrls } });
+  }
+
+  /** What is and isn't wired up, so an assistant can walk the user through setup. */
+  health() {
+    const cfg = this.config;
+    const device = this.presence.device;
+    const checks = [
+      {
+        check: "calendar",
+        ok: cfg.calendar.icsUrls.length > 0 && !this.calendarError,
+        detail: cfg.calendar.icsUrls.length
+          ? (this.calendarError ?? `${cfg.calendar.icsUrls.length} feed(s), ${this.calendar.length} events in the next 36 h`)
+          : "No calendar connected. Add the Google Calendar 'Secret address in iCal format' with add_calendar.",
+      },
+      {
+        check: "call detection",
+        ok: Boolean(device && device.method !== "zoom process only"),
+        detail: device
+          ? `${device.method}${device.micApps.length ? `; mic held by ${device.micApps.join(", ")}` : ""}`
+          : (macHelperError ?? "not checked yet"),
+      },
+      {
+        check: "slack huddles",
+        ok: Boolean(cfg.presence.slackUserToken) && !this.presence.slackError,
+        detail: cfg.presence.slackUserToken
+          ? (this.presence.slackError ?? "token works")
+          : "Optional: the microphone check already catches huddles. A token makes huddle detection independent of the microphone.",
+      },
+    ];
+    return { ok: checks.every((c) => c.ok || c.check === "slack huddles"), checks };
   }
 
   private maybeWarn(now: number): void {

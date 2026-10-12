@@ -47,16 +47,27 @@ export function classify(ev: VEvent, title: string, cfg: Config["calendar"]): Ev
   const hasConference =
     CONFERENCE_HINT.test(text(ev.location)) ||
     CONFERENCE_HINT.test(text(ev.description)) ||
-    Object.keys(raw).some((k) => k.toUpperCase().startsWith("X-GOOGLE-CONFERENCE"));
+    // node-ical drops the "X-" prefix from extension properties.
+    Object.keys(raw).some((k) => /^(X-)?GOOGLE-CONFERENCE/i.test(k));
   if (others.length > (owners.length ? 0 : 1) || hasConference) return "meeting";
   return cfg.soloEventsAreMeetings ? "meeting" : null;
 }
 
 /** Turns a parsed iCal feed into the timed meetings and focus blocks within [from, to]. */
+/** Google names a primary calendar's feed after its owner's email. */
+export function feedOwner(data: CalendarResponse): string | null {
+  const name = text(data.vcalendar?.["WR-CALNAME"]).trim();
+  return /^[^@\s]+@[^@\s]+$/.test(name) ? name.toLowerCase() : null;
+}
+
 export function eventsFromIcs(data: CalendarResponse, cfg: Config["calendar"], from: Date, to: Date): ScheduleEvent[] {
+  if (!cfg.ownerEmails.length) {
+    const owner = feedOwner(data);
+    if (owner) cfg = { ...cfg, ownerEmails: [owner] };
+  }
   const out: ScheduleEvent[] = [];
   for (const [uid, comp] of Object.entries(data)) {
-    if (!comp || (comp as { type?: string }).type !== "VEVENT") continue;
+    if (uid === "vcalendar" || !comp || (comp as { type?: string }).type !== "VEVENT") continue;
     const ev = comp as VEvent;
     // Overrides of a recurring series are applied by expandRecurringEvent on the base event.
     if (ev.recurrenceid) continue;

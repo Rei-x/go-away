@@ -52,10 +52,6 @@ const wrap =
     }
   };
 
-type Config = {
-  calendar: { icsUrls: string[]; focusKeywords: string[] };
-};
-
 const server = new McpServer({ name: "go-away", version: "0.1.0" });
 
 server.registerTool(
@@ -65,6 +61,15 @@ server.registerTool(
       "What Go Away is doing now: working / on_break / deferred (waiting for a meeting or call to end) / holding (focus session), when the next micro and long breaks are due, the current meeting or focus session, and live call signals.",
   },
   wrap(async () => call("GET", "/status")),
+);
+
+server.registerTool(
+  "check_setup",
+  {
+    description:
+      "Checks what Go Away can see: calendar feeds, call detection (microphone/camera, which apps hold the mic), Slack. Use it first when setting Go Away up, and walk the user through anything not ok.",
+  },
+  wrap(async () => call("GET", "/health")),
 );
 
 server.registerTool(
@@ -81,7 +86,7 @@ server.registerTool(
       "Change settings with a partial patch, e.g. {\"longBreak\": {\"intervalMinutes\": 50}}.",
       "Sections: microBreak {enabled, intervalMinutes, durationSeconds}; longBreak {enabled, intervalMinutes, durationMinutes};",
       "calendar {icsUrls, refreshMinutes, focusKeywords, soloEventsAreMeetings, ownerEmails};",
-      "presence {slackUserToken, micInUseIsCall, inCallCommand, pollSeconds}; focus {holdLongBreaksUntilEnd, maxHoldMinutes};",
+      "presence {slackUserToken, slackStatusDuringBreaks, micInUseIsCall, cameraInUseIsCall, ignoreMicApps, inCallCommand, pollSeconds}; focus {holdLongBreaksUntilEnd, maxHoldMinutes};",
       "strictness {delayLooseningUntilNextBreak, idleResetMinutes}.",
       "Changes that make breaks rarer, shorter or disabled are queued until after the next completed break.",
     ].join(" "),
@@ -104,21 +109,16 @@ server.registerTool(
       "Connect a calendar by its secret iCal address. In Google Calendar: Settings → (your calendar) → Integrate calendar → 'Secret address in iCal format'. Meetings in it will never be interrupted by a break; events with a focus keyword in the title become focus sessions.",
     inputSchema: { icsUrl: z.string().url() },
   },
-  wrap(async ({ icsUrl }) => {
-    const { config } = (await call("GET", "/config")) as { config: Config };
-    const icsUrls = [...new Set([...config.calendar.icsUrls, icsUrl])];
-    await call("PATCH", "/config", { calendar: { icsUrls } });
-    return call("POST", "/calendar/refresh");
-  }),
+  wrap(async ({ icsUrl }) => call("POST", "/calendars", { url: icsUrl })),
 );
 
 server.registerTool(
   "remove_calendar",
-  { description: "Disconnect a calendar feed.", inputSchema: { icsUrl: z.string() } },
-  wrap(async ({ icsUrl }) => {
-    const { config } = (await call("GET", "/config")) as { config: Config };
-    return call("PATCH", "/config", { calendar: { icsUrls: config.calendar.icsUrls.filter((u) => u !== icsUrl) } });
-  }),
+  {
+    description: "Disconnect a calendar feed by its number (#0, #1, …) as shown in get_config.",
+    inputSchema: { index: z.number().int().min(0) },
+  },
+  wrap(async ({ index }) => call("DELETE", `/calendars?index=${index}`)),
 );
 
 server.registerTool(
@@ -157,10 +157,15 @@ server.registerTool(
   "set_slack_token",
   {
     description:
-      "Let Go Away see when you're in a Slack huddle, so a break never lands in the middle of one. Needs a Slack user token (xoxp-…) with the users.profile:read scope.",
-    inputSchema: { token: z.string().regex(/^xox[pe]-/, "expected a Slack user token (xoxp-…)") },
+      "Let Go Away read your Slack huddle state (users.profile:read), and optionally set your status to 'On a break' during long breaks (also needs users.profile:write). Needs a Slack user token (xoxp-…). Huddles are already caught by microphone detection; the token is a second signal.",
+    inputSchema: {
+      token: z.string().regex(/^xox[pe]-/, "expected a Slack user token (xoxp-…)"),
+      statusDuringBreaks: z.boolean().default(false),
+    },
   },
-  wrap(async ({ token }) => call("PATCH", "/config", { presence: { slackUserToken: token } })),
+  wrap(async ({ token, statusDuringBreaks }) =>
+    call("PATCH", "/config", { presence: { slackUserToken: token, slackStatusDuringBreaks: statusDuringBreaks } }),
+  ),
 );
 
 server.registerTool(

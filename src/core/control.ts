@@ -4,7 +4,7 @@ import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 import * as path from "node:path";
 import { homeDir } from "./config";
-import type { Engine } from "./engine";
+import type { ConfigChangeResult, Engine } from "./engine";
 
 /**
  * Localhost-only control API used by the MCP server. Its address and a random bearer
@@ -56,10 +56,21 @@ export function startControlServer(engine: Engine): Promise<http.Server> {
       switch (route) {
         case "GET /status":
           return send(200, engine.status());
+        case "GET /health":
+          return send(200, engine.health());
         case "GET /config":
-          return send(200, { config: engine.config, pending: engine.pendingConfig });
+          return send(200, { config: engine.redactedConfig(), pending: engine.redactedConfig(engine.pendingConfig) });
         case "PATCH /config":
-          return send(200, engine.updateConfig((await readBody(req)) as never));
+          return send(200, redact(engine.updateConfig((await readBody(req)) as never)));
+        case "POST /calendars": {
+          const { url: feed } = (await readBody(req)) as { url?: string };
+          if (!feed) return send(400, { error: "url is required" });
+          const result = redact(engine.addCalendar(feed));
+          await engine.refreshCalendar();
+          return send(200, { ...result, events: engine.upcoming(24).length, error: engine.calendarError });
+        }
+        case "DELETE /calendars":
+          return send(200, redact(engine.removeCalendar(Number(url.searchParams.get("index")))));
         case "GET /schedule":
           return send(200, engine.upcoming(Number(url.searchParams.get("hours") ?? 24)));
         case "POST /calendar/refresh":
@@ -83,6 +94,12 @@ export function startControlServer(engine: Engine): Promise<http.Server> {
     } catch (err) {
       return send(400, { error: (err as Error).message });
     }
+  });
+
+  const redact = (r: ConfigChangeResult) => ({
+    message: r.message,
+    config: engine.redactedConfig(r.config),
+    pending: engine.redactedConfig(r.pending),
   });
 
   return new Promise((resolve) => {

@@ -79,6 +79,20 @@ describe("MCP server", () => {
     expect(r.isError).toBe(true);
   });
 
+  it("never echoes secrets back to the assistant", async () => {
+    await client.callTool({ name: "set_slack_token", arguments: { token: "xoxp-secret-123" } });
+    await client.callTool({ name: "add_calendar", arguments: { icsUrl: "https://calendar.google.com/calendar/ical/me/private-abc123/basic.ics" } });
+    const out = text(await client.callTool({ name: "get_config", arguments: {} }));
+    expect(out).not.toContain("xoxp-secret-123");
+    expect(out).not.toContain("private-abc123");
+    expect(out).toContain("#0: calendar.google.com");
+  });
+
+  it("reports setup health", async () => {
+    const health = json(await client.callTool({ name: "check_setup", arguments: {} }));
+    expect(health.checks.map((c: { check: string }) => c.check)).toEqual(["calendar", "call detection", "slack huddles"]);
+  });
+
   it("explains the science", async () => {
     expect(text(await client.callTool({ name: "explain_break_science", arguments: {} }))).toContain("20-20-20");
   });

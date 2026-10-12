@@ -1,11 +1,12 @@
 import ical from "node-ical";
 import { describe, expect, it } from "vitest";
-import { eventsFromIcs } from "../src/core/calendar";
+import { eventsFromIcs, feedOwner } from "../src/core/calendar";
 import { defaultConfig, mergeConfig } from "../src/core/config";
 
 const ICS = `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//test//EN
+X-WR-CALNAME:me@example.com
 BEGIN:VEVENT
 UID:standup
 DTSTART:20261012T090000Z
@@ -57,6 +58,12 @@ DTSTART;VALUE=DATE:20261012
 DTEND;VALUE=DATE:20261013
 SUMMARY:Conference
 END:VEVENT
+BEGIN:VEVENT
+UID:locked
+DTSTART:20261012T103000Z
+DTEND:20261012T143000Z
+SUMMARY:NO MEETING ZONE!!! Locked-in
+END:VEVENT
 END:VCALENDAR`;
 
 describe("calendar", () => {
@@ -87,5 +94,17 @@ describe("calendar", () => {
     const strict = { ...cfg, soloEventsAreMeetings: true };
     const all = eventsFromIcs(ical.sync.parseICS(ICS), strict, from, to);
     expect(all.map((e) => e.title)).toContain("Lunch");
+  });
+
+  it("treats Google 'no meeting' focus blocks as focus sessions", () => {
+    expect(titles).toContain("focus:NO MEETING ZONE!!! Locked-in@10-12T10:30");
+  });
+
+  it("detects the owner of a Google feed, so declined meetings are skipped without setup", () => {
+    const data = ical.sync.parseICS(ICS);
+    expect(feedOwner(data)).toBe("me@example.com");
+    const auto = eventsFromIcs(data, defaultConfig().calendar, from, to).map((e) => e.title);
+    expect(auto).not.toContain("Sync I declined");
+    expect(auto).toContain("Standup");
   });
 });
