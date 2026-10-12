@@ -1,0 +1,38 @@
+{
+  "name": "go-away",
+  "version": "0.1.0",
+  "description": "A strict, calendar-aware break app: never interrupts a meeting or huddle, never lets you skip. Configured through MCP.",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "npm run build && electron .",
+    "mcp": "node dist/mcp/server.js",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "tsc -p . && vitest run",
+    "mcp:claude": "npm run build && claude mcp add go-away --scope user -- node \"$PWD/dist/mcp/server.js\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rei-x/go-away.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Rei-x/go-away/issues"
+  },
+  "homepage": "https://github.com/Rei-x/go-away#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "node-ical": "^0.27.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "electron": "^44.7.0",
+    "typescript": "5.9",
+    "vitest": "^5.0.4"
+  },
+  "bin": {
+    "go-away-mcp": "dist/mcp/server.js"
+  },
+  "private": true
+}
