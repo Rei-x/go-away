@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Go Away</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #10221c; color: #e8f3ee; cursor: none; user-select: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; text-align: center; padding: 0 2rem; }
+      h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 600; margin: 0; }
+      p { font-size: clamp(1.1rem, 2.2vw, 1.5rem); max-width: 40ch; line-height: 1.5; margin: 0; color: #b6d3c6; }
+      #time { font-size: clamp(3rem, 10vw, 7rem); font-variant-numeric: tabular-nums; font-weight: 300; }
+      #bar { width: min(480px, 80vw); height: 6px; background: #22403a; border-radius: 3px; overflow: hidden; }
+      #fill { height: 100%; width: 0; background: #6fd3a6; transition: width 1s linear; }
+      small { color: #7fa294; font-size: 0.95rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="title">Time to look away</h1>
+      <p id="tip"></p>
+      <div id="time">--</div>
+      <div id="bar"><div id="fill"></div></div>
+      <small>This break can't be skipped. It ends on its own.</small>
+    </main>
+    <script src="break.js"></script>
+  </body>
+</html>
