@@ -42,6 +42,22 @@ func stringProperty(_ object: AudioObjectID, _ selector: AudioObjectPropertySele
     return result as String
 }
 
+/// Bundle ID if the process has one; command-line tools (ffmpeg, sox) report an empty one,
+/// so fall back to the executable name from the PID.
+func processName(_ process: AudioObjectID) -> String {
+    if let bundle = stringProperty(process, kAudioProcessPropertyBundleID), !bundle.isEmpty { return bundle }
+    var address = globalAddress(kAudioProcessPropertyPID)
+    var pid: pid_t = 0
+    var size = UInt32(MemoryLayout<pid_t>.size)
+    if AudioObjectGetPropertyData(process, &address, 0, nil, &size, &pid) == noErr, pid > 0 {
+        var path = [CChar](repeating: 0, count: 4096)
+        if proc_pidpath(pid, &path, UInt32(path.count)) > 0 {
+            return URL(fileURLWithPath: String(cString: path)).lastPathComponent
+        }
+    }
+    return "unknown"
+}
+
 /// macOS 14+: ask each audio client process whether it is capturing input. Exact, and lets
 /// us report which app holds the mic (the same information behind the orange menu bar dot).
 func micAppsByProcess() -> [String]? {
@@ -49,7 +65,7 @@ func micAppsByProcess() -> [String]? {
     var apps: [String] = []
     for process in audioObjects(kAudioHardwarePropertyProcessObjectList) {
         if uint32Property(process, kAudioProcessPropertyIsRunningInput) == 1 {
-            apps.append(stringProperty(process, kAudioProcessPropertyBundleID) ?? "unknown")
+            apps.append(processName(process))
         }
     }
     return apps
