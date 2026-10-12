@@ -125,6 +125,8 @@ function showBreak(brk: ActiveBreak): void {
     });
     win.once("ready-to-show", () => {
       win.show();
+      // macOS ignores simpleFullscreen on a hidden window, which leaves the menu bar showing.
+      if (process.platform === "darwin") win.setSimpleFullScreen(true);
       win.focus();
     });
     void win.loadFile(path.join(ROOT, "src", "renderer", "break.html"));
